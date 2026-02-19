@@ -4,8 +4,12 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <title>Cheguei no HUB</title>
+
+<link rel="icon" href="data:,">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 <style>
   :root{--bg0:#070a14;--bg1:#0b1228;--card:rgba(255,255,255,.07);--st:rgba(255,255,255,.12);--tx:#eef1ff;--mut:rgba(238,241,255,.7);--b1:#ff5a2a;--b2:#ff8a2a;--ok:#22c55e;--bad:#ef4444;--warn:#f59e0b;--r:18px;--sh:0 16px 44px rgba(0,0,0,.50)}
   *{box-sizing:border-box} html,body{height:100%}
@@ -37,9 +41,11 @@
   .loader{width:18px;height:18px;border-radius:99px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;display:inline-block;margin-left:10px;vertical-align:middle;animation:rot .8s linear infinite}
   @keyframes rot{to{transform:rotate(360deg)}}
   .msg{padding:12px;border-radius:var(--r);background:rgba(0,0,0,.30);border:1px solid rgba(255,255,255,.10);font-size:13.5px;line-height:1.35;white-space:pre-wrap;overflow:auto}
+  .dbg{opacity:.9;color:rgba(238,241,255,.72);font-size:12px;margin-top:8px}
   @media(max-width:360px){.steps{grid-template-columns:1fr 1fr}.pill{min-width:150px}}
 </style>
 </head>
+
 <body>
 <div class="app">
   <header>
@@ -86,28 +92,39 @@
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
 <script>
-/* Supabase */
-const SUPABASE_URL = "https://rwzxuiudrbhkfrzxjpyt.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ3enh1aXVkcmJoa2ZyenhqcHl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE1Mzg4NzIsImV4cCI6MjA4NzExNDg3Mn0.jFRgHPWZ8yTAHzXegxCI9s28NlUVyDPF67WmToWSg3g";
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+(()=>{
 
-/* UI */
-const el = id => document.getElementById(id);
-const AMOSTRAS = 5;
-const INTERVALO_MS = 650;
-const MIN_ACCURACY = 120;
+  /* Supabase (blindado: sem "const supabase") */
+  const SUPABASE_URL = "https://rwzxuiudrbhkfrzxjpyt.supabase.co";
+  const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ3enh1aXVkcmJoa2ZyenhqcHl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE1Mzg4NzIsImV4cCI6MjA4NzExNDg3Mn0.jFRgHPWZ8yTAHzXegxCI9s28NlUVyDPF67WmToWSg3g";
 
-function setPhase(t,s){ el("phaseTitle").textContent=t; el("phaseSub").textContent=s; }
-function msg(t){ el("msg").textContent=t; }
-function tag(id, cls, text){ const e=el(id); e.className="tag "+cls; e.textContent=text; }
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+    auth: { persistSession:false, autoRefreshToken:false }
+  });
 
-/* Guia GPS */
-function guiaGPS(){
-  return `⚠️ Localização bloqueada
+  /* UI */
+  const el = id => document.getElementById(id);
+  const AMOSTRAS = 5;
+  const INTERVALO_MS = 650;
+  const MIN_ACCURACY = 120;
+
+  function setPhase(t,s){ el("phaseTitle").textContent=t; el("phaseSub").textContent=s; }
+  function msg(t){ el("msg").textContent=t; }
+  function tag(id, cls, text){ const e=el(id); e.className="tag "+cls; e.textContent=text; }
+
+  function showErr(prefix, err){
+    const e = (err && (err.message || err.error_description)) ? (err.message || err.error_description) : String(err);
+    console.error(prefix, err);
+    msg(prefix + ":\n" + e);
+  }
+
+  /* Guia GPS */
+  function guiaGPS(){
+    return `⚠️ Localização bloqueada
 
 Passo a passo (Chrome):
-
 1) Ative GPS/Localização do celular
 2) Abra no Chrome/Safari (evite abrir dentro do Instagram/WhatsApp)
 3) Toque no cadeado ao lado da URL
@@ -115,129 +132,164 @@ Passo a passo (Chrome):
 5) Atualize a página e clique Recalibrar
 
 Dica: desative “Economia de bateria” para melhorar precisão.`;
-}
-
-/* MAPA */
-let map=null, hubMarker=null, hubCircle=null, meMarker=null, line=null;
-let hub = {lat:-23.443825, lng:-46.529107, raio:500}; // só pra visual; o servidor valida o real
-async function carregarHub(){
-  const { data, error } = await supabase.from("configuracoes_hub").select("*").eq("id",1).single();
-  if(!error && data){
-    hub.lat=data.hub_lat; hub.lng=data.hub_lng; hub.raio=data.raio_metros;
   }
-}
-function initMap(){
-  map = L.map("map").setView([hub.lat, hub.lng], 17);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:20,attribution:"&copy; OpenStreetMap"}).addTo(map);
-  hubMarker = L.marker([hub.lat, hub.lng]).addTo(map).bindPopup("HUB");
-  hubCircle = L.circle([hub.lat, hub.lng], { radius: hub.raio }).addTo(map);
-}
-function updateMap(lat,lng){
-  if(!meMarker) meMarker = L.marker([lat,lng]).addTo(map).bindPopup("Você");
-  else meMarker.setLatLng([lat,lng]);
-  if(line) map.removeLayer(line);
-  line = L.polyline([[lat,lng],[hub.lat,hub.lng]]).addTo(map);
-  const group = L.featureGroup([hubMarker, hubCircle, meMarker]);
-  map.fitBounds(group.getBounds().pad(0.20));
-}
-function distanciaMetros(lat1, lon1, lat2, lon2){
-  const R=6371000, toRad=x=>x*Math.PI/180;
-  const dLat=toRad(lat2-lat1), dLon=toRad(lon2-lon1);
-  const a=Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
-  return R*(2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)));
-}
 
-let lastBest=null;
-function obterLocalizacaoReforcada(){
-  return new Promise((resolve,reject)=>{
-    if(!navigator.geolocation) return reject("Sem suporte a GPS.");
-    let tent=0, best=null;
+  /* MAPA */
+  let map=null, hubMarker=null, hubCircle=null, meMarker=null, line=null;
 
-    setPhase("Etapa 1/3 — GPS","Coletando leituras…");
-    tag("tRead","warn","coletando");
+  // valores default só pra não quebrar — vamos puxar do Supabase
+  let hub = {lat:-23.443825, lng:-46.529107, raio:500};
 
-    const step=()=>{
-      navigator.geolocation.getCurrentPosition(pos=>{
-        tent++;
-        const lat=pos.coords.latitude, lng=pos.coords.longitude;
-        const acc=Number(pos.coords.accuracy||9999);
-
-        if(!best || acc<best.acc) best={lat,lng,acc};
-        const dist=distanciaMetros(best.lat,best.lng,hub.lat,hub.lng);
-        lastBest={...best,dist};
-
-        el("reads").textContent = `${tent}/${AMOSTRAS}`;
-        el("dist").textContent = `${Math.round(dist)} m`;
-        el("acc").textContent  = `${Math.round(best.acc)} m`;
-        updateMap(best.lat,best.lng);
-
-        tag("tAcc", best.acc<=MIN_ACCURACY ? "ok":"warn", best.acc<=MIN_ACCURACY ? "boa":"melhorando");
-        tag("tDist", dist<=hub.raio ? "ok":"bad", dist<=hub.raio ? "dentro":"fora");
-
-        if(tent>=AMOSTRAS){
-          tag("tRead", best.acc<=MIN_ACCURACY ? "ok":"warn", best.acc<=MIN_ACCURACY ? "ok":"fraca");
-          if(best.acc>MIN_ACCURACY){
-            setPhase("Etapa 1/3 — GPS","Precisão fraca");
-            return reject(`Precisão fraca (~${Math.round(best.acc)}m).\nVá para local aberto e clique Recalibrar.`);
-          }
-          setPhase("Etapa 1/3 — GPS","OK ✅");
-          return resolve(lastBest);
-        }
-        setTimeout(step, INTERVALO_MS);
-      }, _=>{
-        setPhase("Etapa 1/3 — GPS","Bloqueado");
-        reject(guiaGPS());
-      }, {enableHighAccuracy:true, timeout:15000, maximumAge:0});
-    };
-    step();
-  });
-}
-
-el("btnRecal").onclick = async ()=>{
-  try{ await obterLocalizacaoReforcada(); msg("GPS ok ✅ Agora clique CHEGUEI NO HUB."); }
-  catch(e){ msg(String(e)); }
-};
-
-el("btnSend").onclick = async ()=>{
-  const id = el("driverId").value.trim();
-  if(!id){ msg("Digite seu ID antes de enviar."); return; }
-
-  const btn=el("btnSend"), ld=el("ld");
-  btn.disabled=true; ld.style.display="inline-block";
-
-  try{
-    const best = await obterLocalizacaoReforcada();
-
-    setPhase("Etapa 2/3 — Envio","Registrando no sistema…");
-
-    const { data, error } = await supabase.rpc("registrar_checkin", {
-      p_id_motorista: id,
-      p_lat: best.lat,
-      p_lng: best.lng,
-      p_acc: best.acc
-    });
+  async function carregarHub(){
+    setPhase("Etapa 0/3 — Config","Buscando HUB…");
+    const { data, error } = await sb.from("configuracoes_hub").select("*").eq("id",1).single();
 
     if(error){
-      setPhase("Etapa 2/3 — Envio","Falhou");
-      msg("Erro: " + error.message);
-      return;
+      // se RLS bloquear ou não existir, mostra o erro na tela
+      showErr("Erro ao carregar configuracoes_hub (RLS?)", error);
+      return false;
     }
-
-    setPhase("Etapa 3/3 — Concluído","Finalizado ✅");
-    msg(String(data));
-
-  }catch(e){
-    msg(String(e));
-  }finally{
-    btn.disabled=false; ld.style.display="none";
+    hub.lat=data.hub_lat;
+    hub.lng=data.hub_lng;
+    hub.raio=data.raio_metros;
+    return true;
   }
-};
 
-/* init */
-(async ()=>{
-  await carregarHub();
-  initMap();
-  msg("Clique em Recalibrar e permita a localização.");
+  function initMap(){
+    map = L.map("map").setView([hub.lat, hub.lng], 17);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:20,attribution:"&copy; OpenStreetMap"}).addTo(map);
+    hubMarker = L.marker([hub.lat, hub.lng]).addTo(map).bindPopup("HUB");
+    hubCircle = L.circle([hub.lat, hub.lng], { radius: hub.raio }).addTo(map);
+  }
+
+  function updateHubVisual(){
+    if(!map) return;
+    hubMarker.setLatLng([hub.lat, hub.lng]);
+    hubCircle.setLatLng([hub.lat, hub.lng]);
+    hubCircle.setRadius(hub.raio);
+    map.setView([hub.lat, hub.lng], 17);
+  }
+
+  function updateMap(lat,lng){
+    if(!meMarker) meMarker = L.marker([lat,lng]).addTo(map).bindPopup("Você");
+    else meMarker.setLatLng([lat,lng]);
+
+    if(line) map.removeLayer(line);
+    line = L.polyline([[lat,lng],[hub.lat,hub.lng]]).addTo(map);
+
+    const group = L.featureGroup([hubMarker, hubCircle, meMarker]);
+    map.fitBounds(group.getBounds().pad(0.20));
+  }
+
+  function distanciaMetros(lat1, lon1, lat2, lon2){
+    const R=6371000, toRad=x=>x*Math.PI/180;
+    const dLat=toRad(lat2-lat1), dLon=toRad(lon2-lon1);
+    const a=Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+    return R*(2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)));
+  }
+
+  let lastBest=null;
+
+  function obterLocalizacaoReforcada(){
+    return new Promise((resolve,reject)=>{
+      if(!navigator.geolocation) return reject("Sem suporte a GPS.");
+      let tent=0, best=null;
+
+      setPhase("Etapa 1/3 — GPS","Coletando leituras…");
+      tag("tRead","warn","coletando");
+
+      const step=()=>{
+        navigator.geolocation.getCurrentPosition(pos=>{
+          tent++;
+          const lat=pos.coords.latitude, lng=pos.coords.longitude;
+          const acc=Number(pos.coords.accuracy||9999);
+
+          if(!best || acc<best.acc) best={lat,lng,acc};
+          const dist=distanciaMetros(best.lat,best.lng,hub.lat,hub.lng);
+          lastBest={...best,dist};
+
+          el("reads").textContent = `${tent}/${AMOSTRAS}`;
+          el("dist").textContent = `${Math.round(dist)} m`;
+          el("acc").textContent  = `${Math.round(best.acc)} m`;
+
+          updateMap(best.lat,best.lng);
+
+          tag("tAcc", best.acc<=MIN_ACCURACY ? "ok":"warn", best.acc<=MIN_ACCURACY ? "boa":"melhorando");
+          tag("tDist", dist<=hub.raio ? "ok":"bad", dist<=hub.raio ? "dentro":"fora");
+
+          if(tent>=AMOSTRAS){
+            tag("tRead", best.acc<=MIN_ACCURACY ? "ok":"warn", best.acc<=MIN_ACCURACY ? "ok":"fraca");
+            if(best.acc>MIN_ACCURACY){
+              setPhase("Etapa 1/3 — GPS","Precisão fraca");
+              return reject(`Precisão fraca (~${Math.round(best.acc)}m).\nVá para local aberto e clique Recalibrar.`);
+            }
+            setPhase("Etapa 1/3 — GPS","OK ✅");
+            return resolve(lastBest);
+          }
+          setTimeout(step, INTERVALO_MS);
+        }, err=>{
+          setPhase("Etapa 1/3 — GPS","Bloqueado");
+          reject(guiaGPS() + "\n\nDetalhe: " + (err && err.message ? err.message : "permissão negada"));
+        }, {enableHighAccuracy:true, timeout:15000, maximumAge:0});
+      };
+      step();
+    });
+  }
+
+  el("btnRecal").onclick = async ()=>{
+    try{
+      await obterLocalizacaoReforcada();
+      msg("GPS ok ✅ Agora clique CHEGUEI NO HUB.");
+    }catch(e){
+      msg(String(e));
+    }
+  };
+
+  el("btnSend").onclick = async ()=>{
+    const id = el("driverId").value.trim();
+    if(!id){ msg("Digite seu ID antes de enviar."); return; }
+
+    const btn=el("btnSend"), ld=el("ld");
+    btn.disabled=true; ld.style.display="inline-block";
+
+    try{
+      const best = await obterLocalizacaoReforcada();
+
+      setPhase("Etapa 2/3 — Envio","Registrando no sistema…");
+
+      const { data, error } = await sb.rpc("registrar_checkin", {
+        p_id_motorista: id,
+        p_lat: best.lat,
+        p_lng: best.lng,
+        p_acc: best.acc
+      });
+
+      if(error){
+        setPhase("Etapa 2/3 — Envio","Falhou");
+        showErr("Erro ao registrar_checkin", error);
+        return;
+      }
+
+      setPhase("Etapa 3/3 — Concluído","Finalizado ✅");
+      msg(String(data));
+
+    }catch(e){
+      msg(String(e));
+    }finally{
+      btn.disabled=false; ld.style.display="none";
+    }
+  };
+
+  /* init */
+  (async ()=>{
+    const ok = await carregarHub();
+    initMap();
+    if(ok) updateHubVisual();
+
+    setPhase("Etapa 1/3 — GPS","Pronto para calibrar");
+    msg("Clique em Recalibrar e permita a localização.");
+  })();
+
 })();
 </script>
 </body>
