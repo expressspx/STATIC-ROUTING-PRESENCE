@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Dashboard — Check-ins</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{--bg:#0b1228;--card:rgba(255,255,255,.07);--st:rgba(255,255,255,.12);--tx:#eef1ff;--mut:rgba(238,241,255,.7);--b1:#ff5a2a;--b2:#ff8a2a}
+  body{margin:0;font-family:system-ui;background:linear-gradient(180deg,#070a14,var(--bg));color:var(--tx);padding:14px}
+  .wrap{max-width:1100px;margin:0 auto}
+  header{display:flex;gap:10px;flex-wrap:wrap;align-items:end;justify-content:space-between;margin-bottom:10px}
+  h1{margin:0;font-size:18px}
+  .bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  input,button{padding:10px 12px;border-radius:12px;border:1px solid var(--st);background:rgba(255,255,255,.06);color:var(--tx);font-size:14px}
+  button{cursor:pointer;background:linear-gradient(135deg,var(--b1),var(--b2));border:0;font-weight:900}
+  .card{background:var(--card);border:1px solid var(--st);border-radius:16px;overflow:hidden}
+  table{width:100%;border-collapse:collapse}
+  th,td{padding:10px;border-bottom:1px solid rgba(255,255,255,.08);text-align:left;font-size:13px}
+  th{font-size:12px;color:var(--mut);font-weight:900}
+  .mut{color:var(--mut)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Dashboard — Check-ins</h1>
+      <div class="mut" id="sub">Carregando…</div>
+    </div>
+    <div class="bar">
+      <input type="date" id="data"/>
+      <button id="btn">Atualizar</button>
+    </div>
+  </header>
+
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th>Hora</th>
+          <th>ID</th>
+          <th>Rota (LETRA[S])</th>
+          <th>Posição</th>
+          <th>Dist (m)</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = "https://rwzxuiudrbhkfrzxjpyt.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ3enh1aXVkcmJoa2ZyenhqcHl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE1Mzg4NzIsImV4cCI6MjA4NzExNDg3Mn0.jFRgHPWZ8yTAHzXegxCI9s28NlUVyDPF67WmToWSg3g";
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const el = id => document.getElementById(id);
+el("data").valueAsDate = new Date();
+
+function rowHTML(r){
+  const hora = new Date(r.created_at).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
+  return `<tr>
+    <td>${hora}</td>
+    <td>${r.id_motorista}</td>
+    <td>${r.letras}</td>
+    <td><b>${r.ordem}º</b></td>
+    <td>${r.dist_m ?? ""}</td>
+  </tr>`;
+}
+
+async function carregar(){
+  const d = el("data").value;
+  el("sub").textContent = "Atualizando…";
+
+  const { data, error } = await supabase
+    .from("checkins")
+    .select("id_motorista, letras, ordem, dist_m, created_at")
+    .eq("data_checkin", d)
+    .order("created_at", { ascending:true });
+
+  if(error){
+    el("sub").textContent = "Erro: " + error.message;
+    return;
+  }
+
+  el("tbody").innerHTML = (data||[]).map(rowHTML).join("") || `<tr><td colspan="5" class="mut">Sem check-ins ainda.</td></tr>`;
+  el("sub").textContent = `Data: ${d} • Total: ${(data||[]).length}`;
+}
+
+el("btn").onclick = carregar;
+carregar();
+
+// auto refresh (30s)
+setInterval(carregar, 30000);
+</script>
+</body>
+</html>

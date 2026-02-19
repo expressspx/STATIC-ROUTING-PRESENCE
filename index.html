@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Admin — Importar Plano</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{--bg:#0b1228;--card:rgba(255,255,255,.07);--st:rgba(255,255,255,.12);--tx:#eef1ff;--mut:rgba(238,241,255,.7);--b1:#ff5a2a;--b2:#ff8a2a}
+  body{margin:0;font-family:system-ui;background:linear-gradient(180deg,#070a14,var(--bg));color:var(--tx);padding:16px}
+  .card{max-width:920px;margin:0 auto;background:var(--card);border:1px solid var(--st);border-radius:18px;padding:16px}
+  h1{margin:0 0 6px;font-size:18px}
+  p{margin:0 0 14px;color:var(--mut)}
+  label{font-size:12px;color:var(--mut)}
+  input,button{width:100%;padding:12px;border-radius:12px;border:1px solid var(--st);background:rgba(255,255,255,.06);color:var(--tx);font-size:14px}
+  button{cursor:pointer;background:linear-gradient(135deg,var(--b1),var(--b2));border:0;font-weight:950;margin-top:10px}
+  .danger{background:#ef4444}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .log{white-space:pre-wrap;background:rgba(0,0,0,.30);border:1px solid rgba(255,255,255,.10);padding:12px;border-radius:12px;margin-top:12px;min-height:110px}
+  .mini{font-size:12px;color:var(--mut);margin-top:8px}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Admin — Importar Plano de Expedição</h1>
+  <p>Importa o CSV do dia para o Supabase. Você pode limpar e importar novamente quando o plano mudar.</p>
+
+  <div class="row">
+    <div>
+      <label>Data do plano</label>
+      <input id="dataPlano" type="date"/>
+    </div>
+    <div>
+      <label>Arquivo CSV (ID, DRIVER PLANEJADO, TIPO DE VEÍCULO, LETRA(S), SPR)</label>
+      <input id="file" type="file" accept=".csv"/>
+    </div>
+  </div>
+
+  <button id="btnImport">IMPORTAR PLANO DO DIA</button>
+  <button id="btnClear" class="danger">LIMPAR PLANO DO DIA</button>
+
+  <div class="mini">Dica: o import remove o plano do dia antes de inserir (evita duplicação).</div>
+  <div class="log" id="log">Aguardando…</div>
+</div>
+
+<script>
+const SUPABASE_URL = "https://rwzxuiudrbhkfrzxjpyt.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ3enh1aXVkcmJoa2ZyenhqcHl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE1Mzg4NzIsImV4cCI6MjA4NzExNDg3Mn0.jFRgHPWZ8yTAHzXegxCI9s28NlUVyDPF67WmToWSg3g";
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const el = id => document.getElementById(id);
+function log(t){ el("log").textContent = t; }
+el("dataPlano").valueAsDate = new Date();
+
+function detectSep(line){ return (line.includes(";") && !line.includes(",")) ? ";" : ","; }
+function cleanHeader(h){
+  return h.toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g,"") // remove acento
+    .replace(/[()]/g,"")
+    .replace(/\s+/g," ")
+    .trim();
+}
+
+function parseCSV(text){
+  const lines = text.split(/\r?\n/).filter(l=>l.trim().length);
+  const sep = detectSep(lines[0]);
+  const headers = lines.shift().split(sep).map(cleanHeader);
+
+  const idx = {
+    id: headers.indexOf("id"),
+    nome: headers.indexOf("driver planejado"),
+    tipo: headers.indexOf("tipo de veiculo"),
+    letras: headers.indexOf("letras"),
+    spr: headers.indexOf("spr")
+  };
+
+  if(idx.id<0 || idx.letras<0) throw new Error("CSV precisa ter colunas ID e LETRA(S).");
+
+  return lines.map(l=>{
+    const c = l.split(sep).map(s=>s.trim());
+    return {
+      id_motorista: c[idx.id],
+      driver_planejado: idx.nome>=0 ? c[idx.nome] : null,
+      tipo_veiculo: idx.tipo>=0 ? c[idx.tipo] : null,
+      letras: c[idx.letras],
+      spr: idx.spr>=0 && c[idx.spr] ? Number(String(c[idx.spr]).replace(/\D+/g,"")) : null
+    };
+  }).filter(r=>r.id_motorista && r.letras);
+}
+
+el("btnImport").onclick = async ()=>{
+  try{
+    const file = el("file").files[0];
+    if(!file) return log("Selecione um CSV primeiro.");
+    const data_plano = el("dataPlano").value;
+    if(!data_plano) return log("Escolha a data do plano.");
+
+    log("Lendo CSV…");
+    const text = await file.text();
+    const rows = parseCSV(text).map(r=>({ ...r, data_plano }));
+
+    log(`Limpando plano do dia ${data_plano}…`);
+    const { error: e1 } = await supabase.rpc("limpar_plano_do_dia", { p_data: data_plano });
+    if(e1) return log("Erro ao limpar: " + e1.message);
+
+    log(`Inserindo ${rows.length} linhas…`);
+    const { error } = await supabase.from("plano_expedicao").insert(rows);
+    if(error) return log("Erro ao inserir: " + error.message);
+
+    log("Plano importado com sucesso ✅");
+  }catch(e){
+    log("Erro: " + e.message);
+  }
+};
+
+el("btnClear").onclick = async ()=>{
+  try{
+    const data_plano = el("dataPlano").value;
+    if(!data_plano) return log("Escolha a data do plano.");
+    log(`Limpando plano do dia ${data_plano}…`);
+
+    const { data, error } = await supabase.rpc("limpar_plano_do_dia", { p_data: data_plano });
+    if(error) return log("Erro: " + error.message);
+
+    log(`Plano limpo ✅\nLinhas removidas: ${data}`);
+  }catch(e){
+    log("Erro: " + e.message);
+  }
+};
+</script>
+</body>
+</html>
