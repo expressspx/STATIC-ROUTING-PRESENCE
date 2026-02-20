@@ -4,7 +4,6 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Dashboard — Check-ins + Import Plano</title>
-
 <link rel="icon" href="data:,">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
@@ -12,11 +11,11 @@
   :root{
     --bg:#0b1228;--card:rgba(255,255,255,.07);--st:rgba(255,255,255,.12);
     --tx:#eef1ff;--mut:rgba(238,241,255,.7);--b1:#ff5a2a;--b2:#ff8a2a;
-    --bad:#ef4444;--ok:#22c55e;--warn:#f59e0b;
+    --bad:#ef4444;--ok:#22c55e;
   }
   *{box-sizing:border-box}
   body{margin:0;font-family:system-ui;background:linear-gradient(180deg,#070a14,var(--bg));color:var(--tx);padding:14px}
-  .wrap{max-width:1180px;margin:0 auto}
+  .wrap{max-width:1280px;margin:0 auto}
   header{display:flex;gap:10px;flex-wrap:wrap;align-items:end;justify-content:space-between;margin-bottom:10px}
   h1{margin:0;font-size:18px}
   .bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
@@ -29,6 +28,7 @@
   button.danger{background:rgba(239,68,68,.22);border:1px solid rgba(239,68,68,.35)}
   button[disabled]{opacity:.55;cursor:not-allowed}
   .mut{color:var(--mut)}
+  .small{font-size:12px;color:var(--mut)}
 
   .card{background:var(--card);border:1px solid var(--st);border-radius:16px;overflow:hidden}
   table{width:100%;border-collapse:collapse}
@@ -42,23 +42,40 @@
   .groupRow td{background:rgba(255,255,255,.04);font-weight:950;border-bottom:1px solid rgba(255,255,255,.10)}
   .pill{display:inline-block;padding:4px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.06);font-size:12px;font-weight:900;margin-left:8px;color:rgba(238,241,255,.85)}
 
-  /* Modal */
+  .chip{
+    display:inline-flex;align-items:center;gap:8px;
+    padding:6px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.14);
+    background:rgba(255,255,255,.06);font-weight:900;font-size:12px;white-space:nowrap
+  }
+  .dot{width:9px;height:9px;border-radius:50%}
+  .chip.blue .dot{background:#60a5fa}   /* MOTO */
+  .chip.gold .dot{background:#f59e0b}   /* FIORINO */
+  .chip.green .dot{background:#34d399}  /* PASSEIO */
+
+  .statusTag{
+    display:inline-block;padding:6px 10px;border-radius:999px;font-weight:950;font-size:12px;
+    border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.06)
+  }
+  .tagMesa{border-color:rgba(34,197,94,.35);background:rgba(34,197,94,.12)}
+  .tagFinal{border-color:rgba(239,68,68,.35);background:rgba(239,68,68,.12)}
+  tr.finalizado{opacity:.35}
+
+  .actions{display:flex;gap:8px;justify-content:flex-end}
+  .btnMini{padding:10px 12px;border-radius:12px;font-weight:950}
+  .btnMini.gray{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12)}
+  .btnMini.orange{background:linear-gradient(135deg,var(--b1),var(--b2));border:0}
+
+  /* Modal (Admin e Mesa) */
   .overlay{
     position:fixed;inset:0;background:rgba(0,0,0,.55);
-    display:flex;align-items:center;justify-content:center;padding:14px;
-    z-index:50;
+    display:flex;align-items:center;justify-content:center;padding:14px;z-index:50;
   }
   .modal{
-    width:min(980px,100%);
-    border-radius:18px;
-    background:rgba(15,23,42,.92);
-    border:1px solid rgba(255,255,255,.12);
-    box-shadow:0 24px 70px rgba(0,0,0,.55);
-    overflow:hidden;
+    width:min(1040px,100%);border-radius:18px;background:rgba(15,23,42,.92);
+    border:1px solid rgba(255,255,255,.12);box-shadow:0 24px 70px rgba(0,0,0,.55);overflow:hidden;
   }
   .modalHead{
-    padding:14px 14px 10px;
-    display:flex;justify-content:space-between;align-items:center;gap:10px;
+    padding:14px 14px 10px;display:flex;justify-content:space-between;align-items:center;gap:10px;
     border-bottom:1px solid rgba(255,255,255,.10);
   }
   .modalHead h2{margin:0;font-size:16px}
@@ -69,22 +86,39 @@
     padding:12px;border-radius:12px;min-height:120px;color:rgba(238,241,255,.9)
   }
   .hint{font-size:12px;color:var(--mut)}
-  @media(max-width:700px){.grid2{grid-template-columns:1fr}}
+  @media(max-width:900px){.grid2{grid-template-columns:1fr}}
+
+  /* Modal Selecionar Mesa */
+  .mesaGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  @media(max-width:900px){.mesaGrid{grid-template-columns:repeat(2,1fr)}}
+  .mesaBtn{
+    padding:16px;border-radius:16px;border:2px solid rgba(34,197,94,.35);
+    background:rgba(34,197,94,.08);cursor:pointer;font-weight:950;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+    min-height:72px;
+  }
+  .mesaBtn.ocupada{
+    border-color:rgba(239,68,68,.35);background:rgba(239,68,68,.10);cursor:not-allowed;opacity:.75
+  }
+  .mesaBtn b{font-size:16px}
+  .mesaBtn span{font-size:12px;color:rgba(238,241,255,.85)}
 </style>
 </head>
 
 <body>
+
 <div class="wrap" id="app" style="display:none">
   <header>
     <div>
       <h1>Dashboard — Check-ins</h1>
       <div class="mut" id="sub">Carregando…</div>
+      <div class="small">Ao vivo via Supabase Realtime</div>
       <div class="err" id="errBox"></div>
     </div>
     <div class="bar">
       <input type="date" id="data"/>
-      <button id="btn">Atualizar</button>
-      <button id="btnAdmin" class="ghost" title="Abrir painel admin">Admin</button>
+      <button id="btn">Recarregar</button>
+      <button id="btnAdmin" class="ghost">Admin</button>
     </div>
   </header>
 
@@ -92,12 +126,15 @@
     <table>
       <thead>
         <tr>
-          <th style="width:120px">Hora</th>
-          <th style="width:120px">ID</th>
+          <th style="width:110px">Hora</th>
+          <th style="width:230px">ID / Nome</th>
+          <th style="width:150px">Tipo</th>
           <th>Rota (LETRA[S])</th>
-          <th style="width:90px">Posição</th>
-          <th style="width:90px">Dist (m)</th>
-          <th style="width:80px" class="right">SPR</th>
+          <th style="width:70px">Pos</th>
+          <th style="width:70px">Dist</th>
+          <th style="width:70px" class="right">SPR</th>
+          <th style="width:110px">Mesa</th>
+          <th style="width:220px" class="right">Ações</th>
         </tr>
       </thead>
       <tbody id="tbody"></tbody>
@@ -105,13 +142,13 @@
   </div>
 </div>
 
-<!-- MODAL ADMIN (começa aberto) -->
-<div class="overlay" id="overlay">
+<!-- MODAL ADMIN -->
+<div class="overlay" id="overlayAdmin">
   <div class="modal">
     <div class="modalHead">
       <div>
         <h2>Admin — Plano de Expedição</h2>
-        <div class="hint">Importe o CSV do dia (na ordem: ID, DRIVER PLANEJADO, TIPO DE VEÍCULO, LETRA(S), SPR)</div>
+        <div class="hint">Importe o CSV do dia (colunas: ID, DRIVER PLANEJADO, TIPO DE VEÍCULO, LETRA(S), SPR)</div>
       </div>
       <button id="btnEnter" class="ghost">Entrar no Dashboard</button>
     </div>
@@ -133,11 +170,6 @@
         <button id="btnClear" class="danger">LIMPAR PLANO DO DIA</button>
       </div>
 
-      <div class="hint">
-        • Importar = limpa o plano do dia e insere novamente (evita duplicidade).<br>
-        • Se der “RLS policy”, falta liberar SELECT/INSERT via policy ou usar RPC com service role.
-      </div>
-
       <div class="ok" id="okBox"></div>
       <div class="err" id="errBoxAdmin"></div>
       <div class="log" id="log">Aguardando…</div>
@@ -145,46 +177,84 @@
   </div>
 </div>
 
+<!-- MODAL SELECIONAR MESA -->
+<div class="overlay" id="overlayMesa" style="display:none">
+  <div class="modal">
+    <div class="modalHead">
+      <div>
+        <h2>Selecionar Mesa</h2>
+        <div class="hint" id="mesaHint">—</div>
+      </div>
+      <button id="btnCloseMesa" class="ghost">Fechar</button>
+    </div>
+    <div class="modalBody">
+      <div class="mesaGrid" id="mesaGrid"></div>
+      <div class="err" id="errMesa" style="display:none"></div>
+      <div class="hint">Verde = livre • Vermelho = ocupada</div>
+    </div>
+  </div>
+</div>
+
 <script>
 (()=>{
 
-  /* ====== CONFIG ====== */
   const SUPABASE_URL = "https://rwzxuiudrbhkfrzxjpyt.supabase.co";
-  const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ3enh1aXVkcmJoa2ZyenhqcHl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE1Mzg4NzIsImV4cCI6MjA4NzExNDg3Mn0.jFRgHPWZ8yTAHzXegxCI9s28NlUVyDPF67WmToWSg3g"; // <-- coloque sua publishable key aqui
-  /* ==================== */
+  const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ3enh1aXVkcmJoa2ZyenhqcHl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE1Mzg4NzIsImV4cCI6MjA4NzExNDg3Mn0.jFRgHPWZ8yTAHzXegxCI9s28NlUVyDPF67WmToWSg3g";
+  const MESA_COUNT = 14;
 
   const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
     auth: { persistSession:false, autoRefreshToken:false }
   });
 
   const el = id => document.getElementById(id);
-
-  // Dashboard boxes
   const errBox = el("errBox");
-
-  // Admin boxes
   const errBoxAdmin = el("errBoxAdmin");
   const okBox = el("okBox");
+  const errMesa = el("errMesa");
 
   function showErr(box, t){ box.style.display="block"; box.textContent=t; console.error(t); }
   function clearErr(box){ box.style.display="none"; box.textContent=""; }
   function showOk(t){ okBox.style.display="block"; okBox.textContent=t; }
   function clearOk(){ okBox.style.display="none"; okBox.textContent=""; }
-
   function log(t){ el("log").textContent = t; }
 
-  // datas padrão
-  el("dataPlano").valueAsDate = new Date();
-  el("data").valueAsDate = new Date();
-
-  // abrir/fechar modal admin
-  function openAdmin(){ el("overlay").style.display="flex"; }
-  function closeAdmin(){ el("overlay").style.display="none"; el("app").style.display="block"; }
+  function openAdmin(){ el("overlayAdmin").style.display="flex"; }
+  function closeAdmin(){ el("overlayAdmin").style.display="none"; el("app").style.display="block"; }
 
   el("btnAdmin").onclick = openAdmin;
   el("btnEnter").onclick = ()=>{ closeAdmin(); carregar(); };
 
-  /* ====== CSV Parser ====== */
+  el("dataPlano").valueAsDate = new Date();
+  el("data").valueAsDate = new Date();
+
+  function escapeHTML(s){
+    return String(s ?? "")
+      .replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;").replaceAll("'","&#039;");
+  }
+  function horaBR(iso){
+    return new Date(iso).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
+  }
+  function groupBy(arr, keyFn){
+    const m = new Map();
+    for(const item of arr){
+      const k = keyFn(item);
+      if(!m.has(k)) m.set(k, []);
+      m.get(k).push(item);
+    }
+    return m;
+  }
+
+  function tipoChip(tipo){
+    const t = (tipo||"").toUpperCase();
+    let cls = "blue";
+    if(t.includes("FIORINO")) cls = "gold";
+    else if(t.includes("PASSEIO")) cls = "green";
+    else if(t.includes("MOTO")) cls = "blue";
+    return `<span class="chip ${cls}"><span class="dot"></span>${escapeHTML(tipo||"-")}</span>`;
+  }
+
+  /* ===== CSV ===== */
   function detectSep(line){ return (line.includes(";") && !line.includes(",")) ? ";" : ","; }
   function cleanHeader(h){
     return h.toLowerCase()
@@ -199,7 +269,6 @@
     const n = Number(s.replace(/[^\d]/g,""));
     return Number.isFinite(n) ? n : null;
   }
-
   function parseCSV(text){
     const lines = text.split(/\r?\n/).filter(l=>l.trim().length);
     if(lines.length < 2) throw new Error("CSV vazio ou sem linhas suficientes.");
@@ -215,11 +284,9 @@
       spr: headers.indexOf("spr"),
     };
 
-    if(idx.id < 0 || idx.letras < 0){
-      throw new Error("Cabeçalho inválido. Precisa ter: ID e LETRA(S).");
-    }
+    if(idx.id < 0 || idx.letras < 0) throw new Error("Cabeçalho inválido. Precisa ter: ID e LETRA(S).");
 
-    const rows = lines.map(l=>{
+    return lines.map(l=>{
       const c = l.split(sep).map(s=>s.trim());
       return {
         id_motorista: c[idx.id],
@@ -229,11 +296,9 @@
         spr: idx.spr>=0 ? toIntMaybe(c[idx.spr]) : null,
       };
     }).filter(r=>r.id_motorista && r.letras);
-
-    return rows;
   }
 
-  /* ====== ADMIN Actions ====== */
+  /* ===== ADMIN ===== */
   el("btnImport").onclick = async ()=>{
     clearErr(errBoxAdmin); clearOk();
     try{
@@ -256,7 +321,7 @@
       if(e2) return showErr(errBoxAdmin,"Erro ao inserir: " + e2.message);
 
       showOk("Plano importado com sucesso ✅");
-      log("Pronto ✅ Você já pode entrar no dashboard.");
+      log("Pronto ✅");
     }catch(e){
       showErr(errBoxAdmin,"Erro: " + (e.message || e));
     }
@@ -279,31 +344,116 @@
     }
   };
 
-  /* ====== DASHBOARD ====== */
-  function escapeHTML(s){
-    return String(s ?? "")
-      .replaceAll("&","&amp;")
-      .replaceAll("<","&lt;")
-      .replaceAll(">","&gt;")
-      .replaceAll('"',"&quot;")
-      .replaceAll("'","&#039;");
+  /* ===== MODAL MESA ===== */
+  let selectedCheckin = null;
+  let mesasCache = [];
+
+  function openMesaModal(checkin){
+    selectedCheckin = checkin;
+    clearErr(errMesa);
+    el("mesaHint").textContent =
+      `${checkin.id_motorista} — ${checkin.driver_name || "-"} • ${checkin.letras || "-"}`;
+    el("overlayMesa").style.display = "flex";
+    renderMesaButtons();
   }
-  function horaBR(iso){
-    return new Date(iso).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
+  function closeMesaModal(){
+    el("overlayMesa").style.display = "none";
+    selectedCheckin = null;
   }
-  function groupBy(arr, keyFn){
-    const m = new Map();
-    for(const item of arr){
-      const k = keyFn(item);
-      if(!m.has(k)) m.set(k, []);
-      m.get(k).push(item);
+  el("btnCloseMesa").onclick = closeMesaModal;
+
+  function renderMesaButtons(){
+    const grid = el("mesaGrid");
+    const occupied = new Map();
+    mesasCache.forEach(m=>{
+      if(m.status === "conferindo") occupied.set(m.mesa_id, m);
+    });
+
+    let html = "";
+    for(let i=1;i<=MESA_COUNT;i++){
+      const occ = occupied.get(i);
+      const isOcc = !!occ;
+      html += `
+        <div class="mesaBtn ${isOcc ? "ocupada":""}" data-mesa="${i}" ${isOcc ? 'data-disabled="1"':''}>
+          <b>Mesa ${i}</b>
+          <span>${isOcc ? "OCUPADA" : "LIVRE"}</span>
+        </div>
+      `;
     }
-    return m;
+    grid.innerHTML = html;
+
+    [...grid.querySelectorAll(".mesaBtn")].forEach(btn=>{
+      if(btn.dataset.disabled === "1") return;
+      btn.onclick = ()=> enviarParaMesa(Number(btn.dataset.mesa));
+    });
   }
 
-  function buildRowsGrouped(checkins, sprById){
-    const grouped = groupBy(checkins, r => r.letras || "(sem rota)");
+  async function enviarParaMesa(mesaId){
+    try{
+      clearErr(errMesa);
+      if(!selectedCheckin) return;
 
+      const { error } = await sb.rpc("enviar_para_mesa", {
+        p_checkin_id: selectedCheckin.checkin_id, // UUID de checkins.id
+        p_mesa_id: mesaId
+      });
+      if(error) return showErr(errMesa, "Erro: " + error.message);
+
+      closeMesaModal();
+      await carregar();
+    }catch(e){
+      showErr(errMesa, "Erro: " + (e.message || e));
+    }
+  }
+
+  /* ===== LOAD ===== */
+  async function carregar(){
+    clearErr(errBox);
+    const d = el("data").value;
+    el("sub").textContent = "Atualizando…";
+
+    const { data: ck, error: eCk } = await sb
+      .from("checkins")
+      .select("id, id_motorista, letras, ordem, dist_m, created_at, data_checkin, mesa_id, finalizado")
+      .eq("data_checkin", d)
+      .order("created_at", { ascending:true });
+
+    if(eCk){
+      el("sub").textContent = "Falha ao carregar.";
+      showErr(errBox,"Erro (checkins / RLS?):\n" + eCk.message);
+      el("tbody").innerHTML = `<tr><td colspan="9" class="mut">Sem dados.</td></tr>`;
+      return;
+    }
+
+    const list = ck || [];
+    if(list.length === 0){
+      el("tbody").innerHTML = `<tr><td colspan="9" class="mut">Sem check-ins ainda.</td></tr>`;
+      el("sub").textContent = `Data: ${d} • Total: 0 • Rotas: 0 • Mesas: ${MESA_COUNT}`;
+      return;
+    }
+
+    const ids = [...new Set(list.map(r => String(r.id_motorista)))];
+
+    const { data: plano, error: ePl } = await sb
+      .from("plano_expedicao")
+      .select("id_motorista, spr, driver_planejado, tipo_veiculo")
+      .eq("data_plano", d)
+      .in("id_motorista", ids);
+
+    if(ePl) showErr(errBox, "Aviso: não consegui carregar PLANO (RLS?):\n" + ePl.message);
+
+    const planoById = new Map();
+    (plano||[]).forEach(p => planoById.set(String(p.id_motorista), p));
+
+    const { data: mesas, error: eM } = await sb
+      .from("mesas_status")
+      .select("mesa_id, status, id_motorista")
+      .order("mesa_id", { ascending:true });
+
+    if(eM) showErr(errBox, "Aviso: não consegui carregar mesas_status (RLS?):\n" + eM.message);
+    mesasCache = mesas || [];
+
+    const grouped = groupBy(list, r => r.letras || "(sem rota)");
     const groups = [...grouped.entries()].map(([letras, rows])=>{
       rows.sort((a,b)=> (a.ordem??9999)-(b.ordem??9999) || (new Date(a.created_at)-new Date(b.created_at)));
       const firstTime = rows[0]?.created_at || "9999";
@@ -313,81 +463,105 @@
 
     let html = "";
     for(const g of groups){
-      html += `<tr class="groupRow"><td colspan="6">
+      html += `<tr class="groupRow"><td colspan="9">
         ${escapeHTML(g.letras)}
         <span class="pill">${g.rows.length} motorista(s)</span>
       </td></tr>`;
 
       for(const r of g.rows){
-        const spr = sprById.get(String(r.id_motorista)) ?? "";
-        html += `<tr>
+        const p = planoById.get(String(r.id_motorista)) || {};
+        const nome = p.driver_planejado || "";
+        const tipo = p.tipo_veiculo || "";
+        const spr = (p.spr ?? "");
+        const mesaId = r.mesa_id || "";
+        const isFinal = !!r.finalizado;
+        const canSend = !isFinal && !mesaId;
+
+        html += `<tr class="${isFinal ? "finalizado":""}">
           <td>${horaBR(r.created_at)}</td>
-          <td>${escapeHTML(r.id_motorista)}</td>
+          <td>
+            <div style="font-weight:950">${escapeHTML(r.id_motorista)}</div>
+            <div class="mut" style="font-weight:850">${escapeHTML(nome)}</div>
+          </td>
+          <td>${tipoChip(tipo)}</td>
           <td>${escapeHTML(r.letras)}</td>
           <td><b>${escapeHTML(r.ordem)}º</b></td>
           <td>${escapeHTML(r.dist_m ?? "")}</td>
           <td class="right"><b>${escapeHTML(spr)}</b></td>
+          <td>
+            ${mesaId ? `<span class="statusTag tagMesa">Mesa ${mesaId}</span>` :
+              (isFinal ? `<span class="statusTag tagFinal">FINALIZADO</span>` : `<span class="statusTag">PENDENTE</span>`)}
+          </td>
+          <td class="right">
+            <div class="actions">
+              <button class="btnMini orange" ${canSend ? "" : "disabled"}
+                data-send="1"
+                data-checkin="${escapeHTML(r.id)}"
+                data-id="${escapeHTML(r.id_motorista)}"
+                data-nome="${escapeHTML(nome)}"
+                data-letras="${escapeHTML(r.letras)}">
+                Enviar p/ mesa
+              </button>
+              <button class="btnMini gray"
+                data-copy="1"
+                data-nome="${escapeHTML(nome)}"
+                data-mesa="${mesaId ? "Mesa "+mesaId : ""}"
+                ${mesaId ? "" : "disabled"}>
+                Copiar
+              </button>
+            </div>
+          </td>
         </tr>`;
       }
     }
 
-    return html || `<tr><td colspan="6" class="mut">Sem check-ins ainda.</td></tr>`;
-  }
+    el("tbody").innerHTML = html;
 
-  async function carregar(){
-    clearErr(errBox);
-    const d = el("data").value;
-    el("sub").textContent = "Atualizando…";
+    [...document.querySelectorAll("[data-send='1']")].forEach(b=>{
+      b.onclick = ()=>{
+        openMesaModal({
+          checkin_id: b.dataset.checkin,
+          id_motorista: b.dataset.id,
+          driver_name: b.dataset.nome,
+          letras: b.dataset.letras
+        });
+      };
+    });
 
-    const { data: ck, error: eCk } = await sb
-      .from("checkins")
-      .select("id_motorista, letras, ordem, dist_m, created_at, data_checkin")
-      .eq("data_checkin", d)
-      .order("created_at", { ascending:true });
-
-    if(eCk){
-      el("sub").textContent = "Falha ao carregar.";
-      showErr(errBox,"Erro (checkins / provável RLS):\n" + eCk.message);
-      el("tbody").innerHTML = `<tr><td colspan="6" class="mut">Sem dados.</td></tr>`;
-      return;
-    }
-
-    const list = ck || [];
-    if(list.length === 0){
-      el("tbody").innerHTML = `<tr><td colspan="6" class="mut">Sem check-ins ainda.</td></tr>`;
-      el("sub").textContent = `Data: ${d} • Total: 0`;
-      return;
-    }
-
-    const ids = [...new Set(list.map(r => String(r.id_motorista)))];
-
-    const { data: plano, error: ePl } = await sb
-      .from("plano_expedicao")
-      .select("id_motorista, spr")
-      .eq("data_plano", d)
-      .in("id_motorista", ids);
-
-    if(ePl){
-      showErr(errBox, "Aviso: não consegui carregar SPR (plano_expedicao / RLS?):\n" + ePl.message);
-    }
-
-    const sprById = new Map();
-    (plano || []).forEach(p => sprById.set(String(p.id_motorista), p.spr));
-
-    el("tbody").innerHTML = buildRowsGrouped(list, sprById);
+    [...document.querySelectorAll("[data-copy='1']")].forEach(b=>{
+      b.onclick = async ()=>{
+        const nome = b.dataset.nome || "";
+        const mesa = b.dataset.mesa || "";
+        const txt = `${nome}, ${mesa}`.trim().replace(/,\s*$/, "");
+        try{
+          await navigator.clipboard.writeText(txt);
+          b.textContent = "Copiado!";
+          setTimeout(()=> b.textContent="Copiar", 900);
+        }catch{
+          alert("Não consegui copiar. Texto:\n" + txt);
+        }
+      };
+    });
 
     const total = list.length;
     const rotas = new Set(list.map(r=>r.letras)).size;
-    el("sub").textContent = `Data: ${d} • Total: ${total} • Rotas: ${rotas}`;
+    el("sub").textContent = `Data: ${d} • Total: ${total} • Rotas: ${rotas} • Mesas: ${MESA_COUNT}`;
   }
 
   el("btn").onclick = carregar;
 
-  // começa na tela admin, mas dá pra entrar no dashboard
-  closeAdmin(); // <-- se quiser OBRIGAR admin, COMENTE esta linha
-  carregar();
+  function subscribe(){
+    sb.channel("rt-checkins")
+      .on("postgres_changes", { event:"*", schema:"public", table:"checkins" }, ()=>carregar())
+      .subscribe();
 
-  setInterval(carregar, 30000);
+    sb.channel("rt-mesas")
+      .on("postgres_changes", { event:"*", schema:"public", table:"mesas_status" }, ()=>carregar())
+      .subscribe();
+  }
+
+  openAdmin();
+  subscribe();
 
 })();
 </script>
