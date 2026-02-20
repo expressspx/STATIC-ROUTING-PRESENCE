@@ -91,7 +91,7 @@
 
   /* Supabase (NÃO use variável "supabase" pra evitar conflito) */
   const SUPABASE_URL = "https://rwzxuiudrbhkfrzxjpyt.supabase.co";
-  const SUPABASE_ANON_KEY = "SUA_ANON_KEY_AQUI";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ3enh1aXVkcmJoa2ZyenhqcHl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE1Mzg4NzIsImV4cCI6MjA4NzExNDg3Mn0.jFRgHPWZ8yTAHzXegxCI9s28NlUVyDPF67WmToWSg3g";
   const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth:{ persistSession:false, autoRefreshToken:false }
   });
@@ -269,3 +269,4 @@ Dica: desative “Economia de bateria” para melhorar precisão.`;
 </script>
 </body>
 </html>
+
