@@ -89,8 +89,10 @@
 <script>
 /* Supabase */
 const SUPABASE_URL = "https://rwzxuiudrbhkfrzxjpyt.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ3enh1aXVkcmJoa2ZyenhqcHl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE1Mzg4NzIsImV4cCI6MjA4NzExNDg3Mn0.jFRgHPWZ8yTAHzXegxCI9s28NlUVyDPF67WmToWSg3g";
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ3enh1aXVkcmJoa2ZyenhqcHl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE1Mzg4NzIsImV4cCI6MjA4NzExNDg3Mn0.jFRgHPWZ8yTAHzXegxCI9s28NlUVyDPF67WmToWSg3g"; // <- se já tiver, pode manter a sua
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth:{ persistSession:false, autoRefreshToken:false }
+});
 
 /* UI */
 const el = id => document.getElementById(id);
@@ -101,6 +103,8 @@ const MIN_ACCURACY = 120;
 function setPhase(t,s){ el("phaseTitle").textContent=t; el("phaseSub").textContent=s; }
 function msg(t){ el("msg").textContent=t; }
 function tag(id, cls, text){ const e=el(id); e.className="tag "+cls; e.textContent=text; }
+
+function hojeISO(){ return new Date().toISOString().slice(0,10); }
 
 /* Guia GPS */
 function guiaGPS(){
@@ -119,19 +123,32 @@ Dica: desative “Economia de bateria” para melhorar precisão.`;
 
 /* MAPA */
 let map=null, hubMarker=null, hubCircle=null, meMarker=null, line=null;
-let hub = {lat:-23.443825, lng:-46.529107, raio:500}; // só pra visual; o servidor valida o real
+let hub = {lat:-23.422971, lng:-46.522922, raio:500}; // fallback
+
 async function carregarHub(){
-  const { data, error } = await supabase.from("configuracoes_hub").select("*").eq("id",1).single();
-  if(!error && data){
-    hub.lat=data.hub_lat; hub.lng=data.hub_lng; hub.raio=data.raio_metros;
-  }
+  // Se sua tabela existir, ele usa. Se não existir, continua no fallback sem quebrar.
+  try{
+    const { data, error } = await supabase
+      .from("configuracoes_hub")
+      .select("*")
+      .eq("id",1)
+      .single();
+
+    if(!error && data){
+      if(typeof data.hub_lat === "number") hub.lat = data.hub_lat;
+      if(typeof data.hub_lng === "number") hub.lng = data.hub_lng;
+      if(typeof data.raio_metros === "number") hub.raio = data.raio_metros;
+    }
+  }catch(_){}
 }
+
 function initMap(){
   map = L.map("map").setView([hub.lat, hub.lng], 17);
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:20,attribution:"&copy; OpenStreetMap"}).addTo(map);
   hubMarker = L.marker([hub.lat, hub.lng]).addTo(map).bindPopup("HUB");
   hubCircle = L.circle([hub.lat, hub.lng], { radius: hub.raio }).addTo(map);
 }
+
 function updateMap(lat,lng){
   if(!meMarker) meMarker = L.marker([lat,lng]).addTo(map).bindPopup("Você");
   else meMarker.setLatLng([lat,lng]);
@@ -140,6 +157,7 @@ function updateMap(lat,lng){
   const group = L.featureGroup([hubMarker, hubCircle, meMarker]);
   map.fitBounds(group.getBounds().pad(0.20));
 }
+
 function distanciaMetros(lat1, lon1, lat2, lon2){
   const R=6371000, toRad=x=>x*Math.PI/180;
   const dLat=toRad(lat2-lat1), dLon=toRad(lon2-lon1);
@@ -148,6 +166,7 @@ function distanciaMetros(lat1, lon1, lat2, lon2){
 }
 
 let lastBest=null;
+
 function obterLocalizacaoReforcada(){
   return new Promise((resolve,reject)=>{
     if(!navigator.geolocation) return reject("Sem suporte a GPS.");
@@ -198,6 +217,7 @@ el("btnRecal").onclick = async ()=>{
   catch(e){ msg(String(e)); }
 };
 
+/* Envio: grava direto em checkins */
 el("btnSend").onclick = async ()=>{
   const id = el("driverId").value.trim();
   if(!id){ msg("Digite seu ID antes de enviar."); return; }
@@ -207,24 +227,60 @@ el("btnSend").onclick = async ()=>{
 
   try{
     const best = await obterLocalizacaoReforcada();
-
     setPhase("Etapa 2/3 — Envio","Registrando no sistema…");
 
-    const { data, error } = await supabase.rpc("registrar_checkin", {
-      p_id_motorista: id,
-      p_lat: best.lat,
-      p_lng: best.lng,
-      p_acc: best.acc
-    });
+    const data_checkin = hojeISO();
+    const dist_m = Math.round(best.dist);
 
-    if(error){
+    // 1) evita duplicidade (mesmo motorista no dia)
+    const { data: ja, error: eJa } = await supabase
+      .from("checkins")
+      .select("id, created_at")
+      .eq("data_checkin", data_checkin)
+      .eq("id_motorista", id)
+      .limit(1);
+
+    if(eJa){
       setPhase("Etapa 2/3 — Envio","Falhou");
-      msg("Erro: " + error.message);
+      msg("Erro ao validar duplicidade: " + eJa.message);
+      return;
+    }
+
+    if((ja||[]).length){
+      setPhase("Etapa 3/3 — Concluído","Já registrado ✅");
+      msg(`Seu check-in de hoje já existe.\nID: ${id}\nData: ${data_checkin}`);
+      return;
+    }
+
+    // 2) cria check-in
+    const payload = {
+      data_checkin,
+      id_motorista: id,
+      lat: best.lat,
+      lng: best.lng,
+      acc: Math.round(best.acc),
+      dist_m,
+      letras: null,
+      ordem: null,
+      mesa_id: null,
+      status: "pendente",
+      finalizado: false
+    };
+
+    const { error: eIns } = await supabase.from("checkins").insert(payload);
+    if(eIns){
+      setPhase("Etapa 2/3 — Envio","Falhou");
+      msg("Erro ao registrar: " + eIns.message);
       return;
     }
 
     setPhase("Etapa 3/3 — Concluído","Finalizado ✅");
-    msg(String(data));
+    msg(`Check-in registrado com sucesso ✅
+
+ID: ${id}
+Data: ${data_checkin}
+Distância: ${dist_m} m
+Precisão: ${Math.round(best.acc)} m`);
 
   }catch(e){
     msg(String(e));
