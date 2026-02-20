@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Painel Mesas</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg0:#070a14;--bg1:#0b1228;
+    --card:rgba(255,255,255,.07);--st:rgba(255,255,255,.14);
+    --tx:#eef1ff;--mut:rgba(238,241,255,.78);
+    --ok:#22c55e;--bad:#ef4444;
+    --b1:#ff5a2a;--b2:#ff8a2a;
+    --r:18px;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    background:radial-gradient(900px 520px at 10% -10%, rgba(255,90,42,.30), transparent 60%),
+               radial-gradient(900px 520px at 110% 0%, rgba(255,138,42,.18), transparent 58%),
+               linear-gradient(180deg,var(--bg0),var(--bg1));
+    color:var(--tx);
+    font-family:system-ui;
+    padding:14px;
+  }
+
+  header{
+    display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;
+    margin-bottom:12px;
+  }
+  h1{margin:0;font-size:20px;font-weight:950;letter-spacing:.2px}
+  .sub{color:var(--mut);font-size:13px}
+  .actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .btn{
+    border:0;cursor:pointer;
+    padding:12px 14px;border-radius:14px;
+    font-weight:950;font-size:14px;color:#fff;
+    background:linear-gradient(135deg,var(--b1),var(--b2));
+    box-shadow:0 18px 44px rgba(255,90,42,.22);
+  }
+  .btn.ghost{
+    background:rgba(255,255,255,.08);
+    border:1px solid rgba(255,255,255,.14);
+    color:var(--tx);
+    box-shadow:none;
+  }
+
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); /* cards maiores */
+    gap:12px;
+  }
+
+  .mesa{
+    background:var(--card);
+    border:1px solid var(--st);
+    border-radius:var(--r);
+    padding:14px;
+    min-height:210px; /* maior */
+    position:relative;
+    overflow:hidden;
+  }
+  .mesa.livre{outline:3px solid rgba(34,197,94,.45)}
+  .mesa.conf{outline:3px solid rgba(239,68,68,.45)}
+
+  .top{
+    display:flex;justify-content:space-between;align-items:center;gap:10px;
+  }
+  .mesaNum{
+    font-size:22px;font-weight:1000;
+  }
+  .statusPill{
+    padding:8px 12px;border-radius:999px;
+    font-weight:950;font-size:13px;
+    border:1px solid rgba(255,255,255,.14);
+    background:rgba(255,255,255,.06);
+    white-space:nowrap;
+  }
+  .statusPill.ok{color:#c8ffe0;border-color:rgba(34,197,94,.35)}
+  .statusPill.bad{color:#ffcbcb;border-color:rgba(239,68,68,.35)}
+
+  .bigId{
+    margin-top:14px;
+    font-size:28px;            /* ID grande */
+    font-weight:1000;
+    letter-spacing:.3px;
+  }
+  .bigRota{
+    margin-top:6px;
+    font-size:18px;            /* rota grande */
+    font-weight:950;
+    color:rgba(238,241,255,.95);
+    word-break:break-word;
+  }
+  .hint{
+    margin-top:10px;
+    font-size:13px;
+    color:var(--mut);
+    line-height:1.25;
+  }
+
+  .btnFinal{
+    margin-top:14px;width:100%;
+    padding:14px;
+    border-radius:16px;
+    border:0;cursor:pointer;
+    font-size:16px;font-weight:1000;
+    color:#fff;background:#ef4444;
+  }
+
+  /* MODAL confirmação */
+  .overlay{
+    position:fixed;inset:0;
+    background:rgba(0,0,0,.60);
+    display:none;
+    align-items:center;justify-content:center;
+    padding:16px;
+    z-index:999;
+  }
+  .modal{
+    width:min(520px,100%);
+    border-radius:18px;
+    background:rgba(15,23,42,.96);
+    border:1px solid rgba(255,255,255,.14);
+    box-shadow:0 26px 80px rgba(0,0,0,.6);
+    overflow:hidden;
+  }
+  .mHead{
+    padding:14px 14px 10px;
+    border-bottom:1px solid rgba(255,255,255,.10);
+  }
+  .mHead h2{margin:0;font-size:16px}
+  .mBody{padding:14px}
+  .mBody .text{
+    white-space:pre-wrap;
+    font-size:14px;color:rgba(238,241,255,.92);
+    line-height:1.35;
+  }
+  .mBtns{
+    display:grid;grid-template-columns:1fr 1fr;gap:10px;
+    padding:14px;border-top:1px solid rgba(255,255,255,.10);
+  }
+  .mBtns button{
+    padding:12px;border-radius:14px;border:0;cursor:pointer;font-weight:1000;font-size:14px
+  }
+  .yes{background:#ef4444;color:#fff}
+  .no{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);color:var(--tx)}
+</style>
+</head>
+
+<body>
+<header>
+  <div>
+    <h1>Painel — Mesas</h1>
+    <div class="sub" id="sub">Carregando…</div>
+  </div>
+  <div class="actions">
+    <button class="btn ghost" id="btnRefresh">Atualizar</button>
+    <button class="btn" id="btnAdd">+ Adicionar Mesa</button>
+  </div>
+</header>
+
+<div class="grid" id="grid"></div>
+
+<!-- Modal confirmação -->
+<div class="overlay" id="ov">
+  <div class="modal">
+    <div class="mHead">
+      <h2>Confirmar Finalização</h2>
+    </div>
+    <div class="mBody">
+      <div class="text" id="mText">Tem certeza?</div>
+    </div>
+    <div class="mBtns">
+      <button class="no" id="btnNo">Cancelar</button>
+      <button class="yes" id="btnYes">SIM, FINALIZAR</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ===== CONFIG ===== */
+const SUPABASE_URL = "https://rwzxuiudrbhkfrzxjpyt.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ3enh1aXVkcmJoa2ZyenhqcHl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE1Mzg4NzIsImV4cCI6MjA4NzExNDg3Mn0.jFRgHPWZ8yTAHzXegxCI9s28NlUVyDPF67WmToWSg3g";
+/* ================== */
+
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth:{persistSession:false, autoRefreshToken:false}
+});
+
+const el = id => document.getElementById(id);
+const hoje = ()=> new Date().toISOString().split("T")[0];
+
+function esc(s){
+  return String(s??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
+}
+
+/* estado do modal */
+let pending = null; // { mesa_id, id_motorista }
+
+function openModal(txt, payload){
+  pending = payload;
+  el("mText").textContent = txt;
+  el("ov").style.display = "flex";
+}
+function closeModal(){
+  el("ov").style.display = "none";
+  pending = null;
+}
+
+el("btnNo").onclick = closeModal;
+el("ov").addEventListener("click",(e)=>{ if(e.target.id==="ov") closeModal(); });
+
+el("btnYes").onclick = async ()=>{
+  if(!pending) return;
+  const { mesa_id, id_motorista } = pending;
+  closeModal();
+  await finalizarReal(mesa_id, id_motorista);
+};
+
+/* ===== MESAS ===== */
+async function carregar(){
+  el("sub").textContent = "Atualizando…";
+
+  const { data, error } = await sb
+    .from("mesas_status")
+    .select("*")
+    .order("mesa_id", {ascending:true});
+
+  if(error){
+    el("grid").innerHTML = `<div class="mesa conf">Erro: ${esc(error.message)}</div>`;
+    el("sub").textContent = "Erro ao carregar.";
+    return;
+  }
+
+  const mesas = data || [];
+  el("sub").textContent = `Mesas: ${mesas.length} • Atualizado: ${new Date().toLocaleTimeString("pt-BR")}`;
+
+  el("grid").innerHTML = mesas.map(m=>{
+    const livre = m.status==="livre";
+    return `
+      <div class="mesa ${livre?'livre':'conf'}">
+        <div class="top">
+          <div class="mesaNum">Mesa ${m.mesa_id}</div>
+          <div class="statusPill ${livre?'ok':'bad'}">
+            ${livre ? '🟢 LIVRE' : '🔴 CONFERINDO'}
+          </div>
+        </div>
+
+        ${livre ? `
+          <div class="hint">Aguardando motorista…</div>
+          <div class="hint">Quando o DASH enviar alguém, aparece aqui automaticamente.</div>
+        ` : `
+          <div class="bigId">${esc(m.id_motorista)}</div>
+          <div class="bigRota">${esc(m.letras)}</div>
+          <button class="btnFinal"
+            onclick="confirmarFinal(${m.mesa_id},'${esc(m.id_motorista)}','${esc(m.letras)}')">
+            FINALIZADO
+          </button>
+          <div class="hint">Ao finalizar: a mesa volta pra LIVRE e o motorista fica apagado no DASH.</div>
+        `}
+      </div>
+    `;
+  }).join("");
+}
+
+window.confirmarFinal = (mesa_id, id_motorista, letras)=>{
+  const txt =
+`Você tem certeza que deseja FINALIZAR?
+
+Mesa: ${mesa_id}
+Motorista: ${id_motorista}
+Rota: ${letras}
+
+Isso vai liberar a mesa e marcar como concluído no Dashboard.`;
+  openModal(txt, { mesa_id, id_motorista });
+};
+
+async function finalizarReal(mesa_id, id_motorista){
+  // marca finalizado
+  const { error: e1 } = await sb.from("finalizados").insert({ data: hoje(), id_motorista });
+
+  // libera mesa
+  const { error: e2 } = await sb.from("mesas_status").update({
+    status:"livre", id_motorista:null, letras:null, updated_at:new Date().toISOString()
+  }).eq("mesa_id", mesa_id);
+
+  // se finalizados já existia, ignoramos duplicado
+  if(e1 && !String(e1.message||"").toLowerCase().includes("duplicate")){
+    alert("Erro ao marcar finalizado: " + e1.message);
+  }
+  if(e2){
+    alert("Erro ao liberar mesa: " + e2.message);
+  }
+
+  carregar();
+}
+
+/* ===== ADICIONAR MESA ===== */
+el("btnAdd").onclick = async ()=>{
+  // pega maior mesa_id atual e cria +1
+  const { data, error } = await sb.from("mesas_status").select("mesa_id").order("mesa_id", {ascending:false}).limit(1);
+  if(error){ alert("Erro: " + error.message); return; }
+
+  const last = data?.[0]?.mesa_id || 0;
+  const next = last + 1;
+
+  const { error: e2 } = await sb.from("mesas_status").insert({ mesa_id: next, status:"livre" });
+  if(e2){ alert("Erro ao adicionar mesa: " + e2.message); return; }
+
+  carregar();
+};
+
+el("btnRefresh").onclick = carregar;
+
+/* init + auto refresh */
+carregar();
+setInterval(carregar, 2500);
+</script>
+
+</body>
+</html>
